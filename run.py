@@ -8,52 +8,49 @@ import processjunit
 
 class Run:
 
-    def __init__(self, python_driver_git, scylla_install_dir, tag, protocol, tests):
+    def __init__(self, cpp_driver_git, scylla_install_dir, tag, protocol):
         self._tag = tag
-        self._python_driver_git = python_driver_git
+        self._cpp_driver_git = cpp_driver_git
         self._scylla_install_dir = scylla_install_dir
-        self._tests = tests
         self._protocol = protocol
-        self._xunit_file = self._get_xunit_file(self._setup_out_dir())
+        # self._xunit_file = self._get_xunit_file(self._setup_out_dir())
         self._run()
-        self._junit = self._process_output()
+        # self._junit = self._process_output()
 
-    @property
-    def summary(self):
-        return self._junit.summary
+    # @property
+    # def summary(self):
+    #     return self._junit.summary
 
     def __repr__(self):
         details = dict(version=self._tag, protocol=self._protocol)
-        details.update(self._junit.summary)
+        # details.update(self._junit.summary)
         return '{version}: v{protocol}: testcases: {testcase},' \
             ' failures: {failure}, errors: {error}, skipped: {skipped},' \
             ' ignored_in_analysis: {ignored_in_analysis}'.format(**details)
 
-    def _setup_out_dir(self):
-        here = os.path.dirname(__file__)
-        xunit_dir = os.path.join(here, 'xunit', self._tag)
-        if not os.path.exists(xunit_dir):
-            os.makedirs(xunit_dir)
-        return xunit_dir
+    # def _setup_out_dir(self):
+    #     here = os.path.dirname(__file__)
+    #     xunit_dir = os.path.join(here, 'xunit', self._tag)
+    #     if not os.path.exists(xunit_dir):
+    #         os.makedirs(xunit_dir)
+    #     return xunit_dir
 
-    def _get_xunit_file(self, xunit_dir):
-        file_path = os.path.join(xunit_dir, 'nosetests.v{}.{}.xml'.format(self._protocol, self._tag))
-        if os.path.exists(file_path):
-            os.unlink(file_path)
-        return file_path
+    # def _get_xunit_file(self, xunit_dir):
+    #     file_path = os.path.join(xunit_dir, 'nosetests.v{}.{}.xml'.format(self._protocol, self._tag))
+    #     if os.path.exists(file_path):
+    #         os.unlink(file_path)
+    #     return file_path
 
     def _ignoreFile(self):
         here = os.path.dirname(__file__)
         return os.path.join(here, 'versions', self._tag, 'ignore.yaml')
 
-    def _ignoreSet(self):
+    def _ignoreList(self):
         ignore_tests = []
         with open(self._ignoreFile()) as f:
             content = yaml.load(f)
             ignore_tests.extend(content['tests'])
-            if self._protocol == '4' and 'v4_tests' in content and content['v4_tests']:
-                ignore_tests.extend(content['v4_tests'])
-        return set(ignore_tests)
+        return ignore_tests
 
     def _environment(self):
         result = {}
@@ -71,21 +68,21 @@ class Run:
         subprocess.check_call(command, shell=True)
 
     def _run(self):
-        os.chdir(self._python_driver_git)
+        os.chdir(self._cpp_driver_git)
         subprocess.check_call('git checkout .'.format(self._tag), shell=True)
         subprocess.check_call('git checkout {}'.format(self._tag), shell=True)
         self._apply_patch()
-        exclude_str = ' '
-        for ignore_element in self._ignoreSet():
-            ignore_element = ignore_element.split('.')[-1]
-            exclude_str += '--exclude %s ' % ignore_element
-        cmd = 'nosetests --with-xunit --xunit-file {} -s {} {}'.format(self._xunit_file, self._tests, exclude_str)
+        # exclude_str = ' '
+
+        gtest_filter = ':'.join(self._ignoreList())
+        # cmd = 'nosetests --with-xunit --xunit-file {} -s {} {}'.format(self._xunit_file, self._tests, exclude_str)
+        cmd = f'./cassandra-integration-tests --install-dir=[{self._scylla_install_dir}] --version={self._tag} --category=CASSANDRA --verbose=ccm --gtest_filter={gtest_filter}'
         logging.info(cmd)
         subprocess.call(cmd.split(), env=self._environment())
 
-    def _process_output(self):
-        junit = processjunit.ProcessJUnit(self._xunit_file, self._ignoreFile())
-        content = open(self._xunit_file).read()
-        open(self._xunit_file, 'w').write(content.replace('classname="', 'classname="version_{}_v{}_'.format(
-            self._tag, self._protocol)))
-        return junit
+    # def _process_output(self):
+    #     junit = processjunit.ProcessJUnit(self._xunit_file, self._ignoreFile())
+    #     content = open(self._xunit_file).read()
+    #     open(self._xunit_file, 'w').write(content.replace('classname="', 'classname="version_{}_v{}_'.format(
+    #         self._tag, self._protocol)))
+    #     return junit
